@@ -9,15 +9,20 @@ import api from '../../api';
 import './Dashboard.css';
 
 const geocode = async (query) => {
+
+
   const res = await axios.get('https://nominatim.openstreetmap.org/search', {
     params: { q: query, format: 'json', limit: 1 },
     headers: { 'Accept-Language': 'en' },
   });
   if (!res.data.length) throw new Error(`Location not found: "${query}"`);
   return { lat: parseFloat(res.data[0].lat), lon: parseFloat(res.data[0].lon) };
+
 };
 
 const RouteLayer = ({ routeData, pins }) => {
+
+  
   const map = useMap();
 
   useEffect(() => {
@@ -61,6 +66,8 @@ const RouteLayer = ({ routeData, pins }) => {
 };
 
 const Dashboard = () => {
+
+
   const [start, setStart] = useState('');
   const [destination, setDestination] = useState('');
   const [routeData, setRouteData] = useState(null);
