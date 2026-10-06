@@ -29,23 +29,15 @@ public class RoutingService {
     }
 
     private long findNearestNode(double lat, double lon) {
+        // car_component vertices all touch a drivable road and are mutually reachable (see db/car_graph.sql)
         String sql = """
-            WITH nearby AS (
-                SELECT id, the_geom FROM ways_vertices_pgr
-                WHERE main_component
-                ORDER BY the_geom <-> ST_SetSRID(ST_Point(?, ?), 4326)
-                LIMIT 200
-            )
-            SELECT n.id FROM nearby n
-            WHERE EXISTS (
-                SELECT 1 FROM ways w
-                WHERE (w.source = n.id OR w.target = n.id)
-                AND w.highway NOT IN ('footway', 'cycleway', 'path', 'service')
-            )
-            ORDER BY n.the_geom <-> ST_SetSRID(ST_Point(?, ?), 4326) LIMIT 1
+            SELECT id FROM ways_vertices_pgr
+            WHERE car_component
+            ORDER BY the_geom <-> ST_SetSRID(ST_Point(?, ?), 4326)
+            LIMIT 1
             """;
         try {
-            Long id = jdbc.queryForObject(sql, Long.class, lon, lat, lon, lat);
+            Long id = jdbc.queryForObject(sql, Long.class, lon, lat);
             if (id == null) throw new IllegalStateException("No routable road found near the given location.");
             return id;
         } catch (EmptyResultDataAccessException e) {
@@ -119,7 +111,8 @@ public class RoutingService {
         double lonPad = Math.max(0.1, 0.25 * (maxLon - minLon));
         return String.format(java.util.Locale.US,
                 "SELECT id, source, target, cost, reverse_cost, x1, y1, x2, y2 FROM ways "
-                        + "WHERE source != target AND geom && ST_MakeEnvelope(%.6f, %.6f, %.6f, %.6f, 4326)",
+                        + "WHERE source != target AND highway NOT IN ('footway', 'cycleway', 'path', 'service') "
+                        + "AND geom && ST_MakeEnvelope(%.6f, %.6f, %.6f, %.6f, 4326)",
                 minLon - lonPad, minLat - latPad, maxLon + lonPad, maxLat + latPad);
     }
 
