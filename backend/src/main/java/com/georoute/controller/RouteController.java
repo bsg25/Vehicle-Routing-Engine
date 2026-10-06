@@ -5,6 +5,7 @@ import com.georoute.model.Coordinate;
 import com.georoute.model.RouteRequest;
 import com.georoute.model.RouteResult;
 import com.georoute.service.RoutingService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,19 +28,32 @@ public class RouteController {
     private final StringRedisTemplate redis;
     private final RoutingService routingService;
     private final ObjectMapper mapper;
+    private final boolean cacheEnabled;
 
-    public RouteController(StringRedisTemplate redis, RoutingService routingService, ObjectMapper mapper) {
+    public RouteController(StringRedisTemplate redis, RoutingService routingService, ObjectMapper mapper,
+                           @Value("${app.cache.enabled}") boolean cacheEnabled) {
         this.redis = redis;
         this.routingService = routingService;
         this.mapper = mapper;
+        this.cacheEnabled = cacheEnabled;
     }
 
     @PostMapping("/route")
     public ResponseEntity<?> getRoute(@RequestBody RouteRequest req) throws Exception {
-        
+
         String validationError = validate(req);
         if (validationError != null)
             return ResponseEntity.badRequest().body(Map.of("message", validationError));
+
+        // Cache disabled (benchmarking baseline): compute every request directly
+        if (!cacheEnabled) {
+            try {
+                return ResponseEntity.ok(routingService.getRoute(req.source(), req.destination()));
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                return ResponseEntity.status(500).body(Map.of("message", "Route calculation failed"));
+            }
+        }
 
         String cacheKey = "route:%s,%s:%s,%s".formatted(
                 req.source().lat(), req.source().lon(),
@@ -48,7 +62,7 @@ public class RouteController {
 
         String cached = redis.opsForValue().get(cacheKey);
         if (cached != null)
-            return ResponseEntity.ok(mapper.readValue(cached, RouteResult.class));
+            return ResponseEntity.ok(fromCache(cached));
 
         Boolean acquired = redis.opsForValue().setIfAbsent(lockKey, "1", Duration.ofSeconds(30));
         if (!Boolean.TRUE.equals(acquired)) {
@@ -56,7 +70,7 @@ public class RouteController {
                 Thread.sleep(500);
                 cached = redis.opsForValue().get(cacheKey);
                 if (cached != null)
-                    return ResponseEntity.ok(mapper.readValue(cached, RouteResult.class));
+                    return ResponseEntity.ok(fromCache(cached));
             }
             return ResponseEntity.status(503)
                     .header("Retry-After", "3")
@@ -73,6 +87,11 @@ public class RouteController {
         } finally {
             redis.delete(lockKey);
         }
+    }
+
+    private RouteResult fromCache(String json) throws Exception {
+        RouteResult r = mapper.readValue(json, RouteResult.class);
+        return new RouteResult(r.geometry(), r.steps(), r.totalDistance(), r.totalDuration(), true);
     }
 
     private static String validate(RouteRequest req) {
