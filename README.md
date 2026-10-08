@@ -50,3 +50,7 @@ The app is at **http://localhost**. For production, set `SITE_ADDRESS=yourdomain
 ## Notes
 
 - **An `.osm.pbf` file must be provided for the import command to work.** It isn't included in the repo (`data/` is gitignored), so download an extract (e.g. [New York from Geofabrik](https://download.geofabrik.de/north-america/us/new-york.html)) and save it as `data/region.osm.pbf` *before* running `osm-routing-import`. If the file is missing, Docker mounts an empty directory in its place and the import fails.
+
+## Next Steps
+
+- Eliminate the need for third-party API responsible for converting natural language source & destination to latitude & longitude coordinates 
